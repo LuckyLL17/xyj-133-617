@@ -1,5 +1,5 @@
 import type { Car, InputState, Track, EnvConfig, WeatherType, TimeOfDay, WackyState } from './types';
-import { clamp, pointToSegmentDist } from '../utils/math';
+import { clamp, pointToSegmentDist, angleDiff } from '../utils/math';
 
 export const GRAVITY_FLIP_INTERVAL = 6000;
 export const GRAVITY_WARNING_TIME = 1500;
@@ -222,16 +222,35 @@ export const updateCarPhysics = (
     const nx = -dy / len;
     const ny = dx / len;
 
-    const toCarX = newX - p1.x, toCarY = newY - p1.y;
+    // 找到车辆在线段上的最近点参数 t
+    const { t: segT } = pointToSegmentDist(newX, newY, p1.x, p1.y, p2.x, p2.y);
+    const nearestPtX = p1.x + dx * segT;
+    const nearestPtY = p1.y + dy * segT;
+
+    const toCarX = newX - nearestPtX, toCarY = newY - nearestPtY;
     const dot = toCarX * nx + toCarY * ny;
     const pushDir = dot >= 0 ? 1 : -1;
 
-    const safeDist = halfWidth - 6;
-    const targetX = p1.x + nx * safeDist * pushDir;
-    const targetY = p1.y + ny * safeDist * pushDir;
+    const safeDist = halfWidth - 8;
+    const targetX = nearestPtX + nx * safeDist * pushDir;
+    const targetY = nearestPtY + ny * safeDist * pushDir;
 
-    car.x = car.x + (targetX - car.x) * 0.5;
-    car.y = car.y + (targetY - car.y) * 0.5;
+    // 更快的推回速度，避免卡在边缘
+    car.x = car.x + (targetX - car.x) * 0.7;
+    car.y = car.y + (targetY - car.y) * 0.7;
+
+    // 如果车辆严重偏离，轻微调整车头朝向赛道方向，帮助脱困
+    const offTrackAmount = nearestAfter.dist - halfWidth;
+    if (offTrackAmount > 8 && Math.abs(car.speed) < car.maxSpeed * 0.4) {
+      // 计算赛道切线方向
+      const trackAngle = Math.atan2(dy, dx);
+      // 车辆朝向与赛道方向的差值
+      const angleToTrack = angleDiff(trackAngle, car.angle);
+      // 如果朝向与赛道方向偏差太大，稍微修正一下
+      if (Math.abs(angleToTrack) > 0.3) {
+        car.angle += clamp(angleToTrack, -0.05, 0.05);
+      }
+    }
   }
 
   if (car.drifting) {
@@ -317,6 +336,22 @@ export const nearestTrackIdx = (x: number, y: number, track: Track): number => {
 
 export const nearestTrackIdxSameZ = (x: number, y: number, track: Track, targetZ: number): number => {
   return nearestTrackDistSameZ(x, y, track, targetZ).nearestIdx;
+};
+
+// 获取车辆相对于赛道中心线的横向偏移（左侧为负，右侧为正）
+export const getTrackLateralOffset = (x: number, y: number, track: Track, targetZ: number): { offset: number; nearestIdx: number } => {
+  const nearest = nearestTrackDistSameZ(x, y, track, targetZ);
+  const p1 = track.points[nearest.nearestIdx];
+  const p2 = track.points[(nearest.nearestIdx + 1) % track.points.length];
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const toCarX = x - p1.x;
+  const toCarY = y - p1.y;
+  const dot = toCarX * nx + toCarY * ny;
+  return { offset: dot, nearestIdx: nearest.nearestIdx };
 };
 
 export const checkCarCollision = (car: Car, other: Car): boolean => {

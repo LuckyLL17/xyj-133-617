@@ -426,13 +426,22 @@ export const getStartPositions = (track: Track, count: number) => {
   const perpX = -Math.sin(angle);
   const perpY = Math.cos(angle);
 
-  const positions: { x: number; y: number; angle: number }[] = [];
+  // 车辆碰撞半径（与 physics.ts 中 checkCarCollision 的 r1 一致）
+  const carRadius = 18;
+  // 赛道半宽减去安全边距（车辆半径 + 额外安全距离）
+  const safeHalfWidth = track.width / 2 - carRadius - 8;
   const half = Math.ceil(count / 2);
+  // 根据赛道安全宽度和车辆数量动态计算横向间距
+  const lateralSpacing = half > 1
+    ? Math.min(45, (safeHalfWidth * 2) / (half - 1 + 0.5))
+    : 0;
+
+  const positions: { x: number; y: number; angle: number }[] = [];
   for (let i = 0; i < count; i++) {
     const row = i % half;
     const col = Math.floor(i / half);
     const offsetX = -col * 60 - 30;
-    const offsetY = (row - (half - 1) / 2) * 45;
+    const offsetY = (row - (half - 1) / 2) * lateralSpacing;
     positions.push({
       x: p1.x + Math.cos(angle) * offsetX + perpX * offsetY,
       y: p1.y + Math.sin(angle) * offsetX + perpY * offsetY,

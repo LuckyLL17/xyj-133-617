@@ -213,6 +213,9 @@ export const updateCarPhysics = (
       car.speed = clamp(car.speed + 0.08, 0, car.maxSpeed * 1.5);
     }
   } else {
+    // 偏离赛道时仍允许前进，避免赛车卡死无法移动
+    car.x = newX;
+    car.y = newY;
     car.speed *= mod2.offTrackPenalty;
 
     const p1 = track.points[nearestAfter.nearestIdx];
@@ -222,13 +225,18 @@ export const updateCarPhysics = (
     const nx = -dy / len;
     const ny = dx / len;
 
-    const toCarX = newX - p1.x, toCarY = newY - p1.y;
+    // 计算赛车在赛道线段上的最近点，而非使用线段起点
+    const segResult = pointToSegmentDist(newX, newY, p1.x, p1.y, p2.x, p2.y);
+    const closestX = p1.x + (p2.x - p1.x) * segResult.t;
+    const closestY = p1.y + (p2.y - p1.y) * segResult.t;
+
+    const toCarX = newX - closestX, toCarY = newY - closestY;
     const dot = toCarX * nx + toCarY * ny;
     const pushDir = dot >= 0 ? 1 : -1;
 
     const safeDist = halfWidth - 6;
-    const targetX = p1.x + nx * safeDist * pushDir;
-    const targetY = p1.y + ny * safeDist * pushDir;
+    const targetX = closestX + nx * safeDist * pushDir;
+    const targetY = closestY + ny * safeDist * pushDir;
 
     car.x = car.x + (targetX - car.x) * 0.5;
     car.y = car.y + (targetY - car.y) * 0.5;

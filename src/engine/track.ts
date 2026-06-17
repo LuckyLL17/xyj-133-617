@@ -418,26 +418,67 @@ export const buildTrackFromCustom = (custom: CustomTrack): Track => {
 };
 
 export const getStartPositions = (track: Track, count: number) => {
-  const startIdx = 0;
-  const nextIdx = 1;
-  const p1 = track.points[startIdx];
-  const p2 = track.points[nextIdx];
+  const pts = track.points;
+  const n = pts.length;
+  const p1 = pts[0];
+  const p2 = pts[1];
   const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-  const perpX = -Math.sin(angle);
-  const perpY = Math.cos(angle);
 
   const positions: { x: number; y: number; angle: number }[] = [];
   const half = Math.ceil(count / 2);
+
+  // 沿赛道中心线向后行走，计算每列赛车的位置
+  const rowSpacing = 60;
+  const colOffset = 30;
+
   for (let i = 0; i < count; i++) {
     const row = i % half;
     const col = Math.floor(i / half);
-    const offsetX = -col * 60 - 30;
-    const offsetY = (row - (half - 1) / 2) * 45;
-    positions.push({
-      x: p1.x + Math.cos(angle) * offsetX + perpX * offsetY,
-      y: p1.y + Math.sin(angle) * offsetX + perpY * offsetY,
-      angle,
-    });
+    const perpOffset = (row - (half - 1) / 2) * 45;
+    const longDist = col * rowSpacing + colOffset;
+
+    // 沿赛道中心线向后行走longDist距离
+    let distAccum = 0;
+    let posIdx = 0;
+    for (let step = 0; step < n && distAccum < longDist; step++) {
+      const prevIdx = (posIdx - 1 + n) % n;
+      const dx = pts[posIdx].x - pts[prevIdx].x;
+      const dy = pts[posIdx].y - pts[prevIdx].y;
+      const segLen = Math.sqrt(dx * dx + dy * dy);
+      if (distAccum + segLen >= longDist) {
+        // 在当前线段内插值
+        const remain = longDist - distAccum;
+        const t = segLen > 0 ? remain / segLen : 0;
+        const localX = pts[posIdx].x + (pts[prevIdx].x - pts[posIdx].x) * t;
+        const localY = pts[posIdx].y + (pts[prevIdx].y - pts[posIdx].y) * t;
+        // 使用局部赛道方向计算垂直偏移
+        const localAngle = Math.atan2(dy, dx);
+        const localPerpX = -Math.sin(localAngle);
+        const localPerpY = Math.cos(localAngle);
+        positions.push({
+          x: localX + localPerpX * perpOffset,
+          y: localY + localPerpY * perpOffset,
+          angle,
+        });
+        break;
+      }
+      distAccum += segLen;
+      posIdx = prevIdx;
+    }
+
+    // 如果循环结束仍未到达目标距离，使用最后到达的点
+    if (positions.length <= i) {
+      const prevPtIdx = (posIdx - 1 + n) % n;
+      const nextPtIdx = (posIdx + 1) % n;
+      const localAngle = Math.atan2(pts[nextPtIdx].y - pts[prevPtIdx].y, pts[nextPtIdx].x - pts[prevPtIdx].x);
+      const localPerpX = -Math.sin(localAngle);
+      const localPerpY = Math.cos(localAngle);
+      positions.push({
+        x: pts[posIdx].x + localPerpX * perpOffset,
+        y: pts[posIdx].y + localPerpY * perpOffset,
+        angle,
+      });
+    }
   }
   return positions;
 };

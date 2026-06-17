@@ -428,11 +428,32 @@ export const getStartPositions = (track: Track, count: number) => {
 
   const positions: { x: number; y: number; angle: number }[] = [];
   const half = Math.ceil(count / 2);
+  const halfWidth = track.width / 2;
+  // 车辆安全边距，确保与赛道边缘保持足够距离
+  const carSideMargin = 24;
+  // 车辆之间的横向间距
+  const carLateralGap = 40;
+  // 计算可用的横向空间
+  const availableLateralSpace = halfWidth - carSideMargin;
+  // 根据赛道宽度调整每行最多车辆数
+  const maxCarsPerRow = Math.max(1, Math.floor((availableLateralSpace * 2 + carLateralGap) / (carLateralGap + 8)));
+  const actualRowCount = Math.min(half, maxCarsPerRow);
+  // 车辆之间的纵向间距
+  const longitudinalGap = 55;
+  // 第一排的起始纵向偏移
+  const startLongitudinalOffset = 40;
+
   for (let i = 0; i < count; i++) {
-    const row = i % half;
-    const col = Math.floor(i / half);
-    const offsetX = -col * 60 - 30;
-    const offsetY = (row - (half - 1) / 2) * 45;
+    const row = i % actualRowCount;
+    const col = Math.floor(i / actualRowCount);
+    const offsetX = -col * longitudinalGap - startLongitudinalOffset;
+    // 计算横向偏移，确保车辆对称分布且远离边缘
+    const lateralSpacing = actualRowCount > 1
+      ? Math.min(carLateralGap, (availableLateralSpace * 2) / (actualRowCount - 1) - 1)
+      : 0;
+    const offsetY = actualRowCount > 1
+      ? (row - (actualRowCount - 1) / 2) * lateralSpacing
+      : 0;
     positions.push({
       x: p1.x + Math.cos(angle) * offsetX + perpX * offsetY,
       y: p1.y + Math.sin(angle) * offsetX + perpY * offsetY,

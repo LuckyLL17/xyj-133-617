@@ -219,19 +219,35 @@ export const updateCarPhysics = (
     const p2 = track.points[(nearestAfter.nearestIdx + 1) % track.points.length];
     const dx = p2.x - p1.x, dy = p2.y - p1.y;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    // 法向（垂直赛道方向）
     const nx = -dy / len;
     const ny = dx / len;
+    // 切向（沿赛道前进方向）
+    const tx = dx / len;
+    const ty = dy / len;
 
-    const toCarX = newX - p1.x, toCarY = newY - p1.y;
-    const dot = toCarX * nx + toCarY * ny;
-    const pushDir = dot >= 0 ? 1 : -1;
+    // 计算车辆新位置相对于p1的向量
+    const toNewX = newX - p1.x;
+    const toNewY = newY - p1.y;
 
+    // 将新位置分解为法向分量和切向分量
+    const normalComp = toNewX * nx + toNewY * ny;
+    const tangentComp = toNewX * tx + toNewY * ty;
+
+    // 限制法向分量（垂直赛道方向）在安全范围内
     const safeDist = halfWidth - 6;
-    const targetX = p1.x + nx * safeDist * pushDir;
-    const targetY = p1.y + ny * safeDist * pushDir;
+    const clampedNormal = clamp(normalComp, -safeDist, safeDist);
 
-    car.x = car.x + (targetX - car.x) * 0.5;
-    car.y = car.y + (targetY - car.y) * 0.5;
+    // 保留切向分量（沿赛道方向），让车辆可以沿赛道边缘滑动前进
+    // 计算p1点在切向上的位置 + 切向分量 = 保留前进运动
+    const finalX = p1.x + nx * clampedNormal + tx * tangentComp;
+    const finalY = p1.y + ny * clampedNormal + ty * tangentComp;
+
+    // 平滑过渡到目标位置，避免瞬间跳动
+    const absSpeed = Math.abs(car.speed);
+    const lerpFactor = clamp(0.6 + absSpeed / car.maxSpeed * 0.3, 0.6, 0.9);
+    car.x = car.x + (finalX - car.x) * lerpFactor;
+    car.y = car.y + (finalY - car.y) * lerpFactor;
   }
 
   if (car.drifting) {

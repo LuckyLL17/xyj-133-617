@@ -426,13 +426,24 @@ export const getStartPositions = (track: Track, count: number) => {
   const perpX = -Math.sin(angle);
   const perpY = Math.cos(angle);
 
+  const halfWidth = track.width / 2;
+  const safeMargin = 25; // 车辆距离赛道边缘的最小安全距离
+  const maxLateralOffset = halfWidth - safeMargin; // 最大横向偏移量
+
   const positions: { x: number; y: number; angle: number }[] = [];
   const half = Math.ceil(count / 2);
+
+  // 根据赛道宽度动态计算车辆横向间距，确保最外侧车辆在安全范围内
+  const baseRowSpacing = 45;
+  const maxOffset = (half - 1) / 2 * baseRowSpacing;
+  const scaleFactor = maxOffset > maxLateralOffset ? maxLateralOffset / maxOffset : 1;
+  const rowSpacing = baseRowSpacing * scaleFactor;
+
   for (let i = 0; i < count; i++) {
     const row = i % half;
     const col = Math.floor(i / half);
     const offsetX = -col * 60 - 30;
-    const offsetY = (row - (half - 1) / 2) * 45;
+    const offsetY = (row - (half - 1) / 2) * rowSpacing;
     positions.push({
       x: p1.x + Math.cos(angle) * offsetX + perpX * offsetY,
       y: p1.y + Math.sin(angle) * offsetX + perpY * offsetY,

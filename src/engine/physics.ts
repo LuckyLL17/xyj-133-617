@@ -213,25 +213,57 @@ export const updateCarPhysics = (
       car.speed = clamp(car.speed + 0.08, 0, car.maxSpeed * 1.5);
     }
   } else {
-    car.speed *= mod2.offTrackPenalty;
-
     const p1 = track.points[nearestAfter.nearestIdx];
     const p2 = track.points[(nearestAfter.nearestIdx + 1) % track.points.length];
+
+    // 计算车辆在赛道线段上的最近点
+    const { t: segT } = pointToSegmentDist(newX, newY, p1.x, p1.y, p2.x, p2.y);
+    const closestX = p1.x + segT * (p2.x - p1.x);
+    const closestY = p1.y + segT * (p2.y - p1.y);
+
+    // 赛道切线和法线方向
     const dx = p2.x - p1.x, dy = p2.y - p1.y;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const tx = dx / len;
+    const ty = dy / len;
+    const nx = -ty;
+    const ny = tx;
 
-    const toCarX = newX - p1.x, toCarY = newY - p1.y;
+    // 判断车辆在赛道的哪一侧
+    const toCarX = newX - closestX, toCarY = newY - closestY;
     const dot = toCarX * nx + toCarY * ny;
     const pushDir = dot >= 0 ? 1 : -1;
 
-    const safeDist = halfWidth - 6;
-    const targetX = p1.x + nx * safeDist * pushDir;
-    const targetY = p1.y + ny * safeDist * pushDir;
+    // 将速度分解为法向和切向分量
+    const speedX = Math.cos(car.angle) * car.speed;
+    const speedY = Math.sin(car.angle) * car.speed;
+    const normalSpeed = speedX * nx + speedY * ny;
+    const tangentSpeed = speedX * tx + speedY * ty;
 
-    car.x = car.x + (targetX - car.x) * 0.5;
-    car.y = car.y + (targetY - car.y) * 0.5;
+    // 法向速度衰减（碰撞反弹），切向速度保留（沿边缘滑动）
+    const bouncedNormalSpeed = -normalSpeed * 0.2;
+    const dampedTangentSpeed = tangentSpeed * mod2.offTrackPenalty;
+
+    // 合成新的速度
+    const newSpeedX = bouncedNormalSpeed * nx + dampedTangentSpeed * tx;
+    const newSpeedY = bouncedNormalSpeed * ny + dampedTangentSpeed * ty;
+    const newSpeedMag = Math.sqrt(newSpeedX * newSpeedX + newSpeedY * newSpeedY);
+
+    if (newSpeedMag > 0.01) {
+      car.speed = newSpeedMag;
+      car.angle = Math.atan2(newSpeedY, newSpeedX);
+    } else {
+      car.speed *= mod2.offTrackPenalty;
+    }
+
+    // 将车辆推回赛道内安全距离（基于最近点计算，更准确）
+    const safeDist = halfWidth - 6;
+    const targetX = closestX + nx * safeDist * pushDir;
+    const targetY = closestY + ny * safeDist * pushDir;
+
+    // 平滑推回，同时保留切向运动
+    car.x = newX + (targetX - newX) * 0.6;
+    car.y = newY + (targetY - newY) * 0.6;
   }
 
   if (car.drifting) {
